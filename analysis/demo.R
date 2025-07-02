@@ -14,15 +14,18 @@ df_plot <- df_region %>%
   select(wildtype, position,
          deleteriousness,
          surface_accessibility, `AA-only`, `Full model`) %>%
-  rename(`DMS`=deleteriousness,
-         `Surf. acc.`=surface_accessibility) %>%
-  mutate(`DMS`=rank(`DMS`)/n(),
-         `Full model`=rank(-`Full model`)/n(),
-         `Surf. acc.`=rank(-`Surf. acc.`)/n(),
+  mutate(`Full model`=rank(-`Full model`)/n(),
+         surface_accessibility=rank(-surface_accessibility)/n(),
          `AA-only`=rank(-`AA-only`)/n()) %>%
+  rename(Experimental=deleteriousness,
+         `Surf. acc.`=surface_accessibility,
+         Exchangeability=`AA-only`,
+         `Exchangeability + surf. acc.`=`Full model`) %>%
   pivot_longer(!c(wildtype, position), names_to="feature") %>%
-  mutate(feature=factor(feature, levels=c("AA-only", "Surf. acc.",
-                                          "Full model", "DMS")))
+  mutate(feature=factor(feature, levels=c("Exchangeability",
+                                          "Surf. acc.",
+                                          "Exchangeability + surf. acc.",
+                                          "Experimental")))
 
 df_labels <- df_region %>%
   group_by(position) %>%

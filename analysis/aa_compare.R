@@ -30,8 +30,28 @@ blosum <- blosum %>%
 write_csv(blosum, "data/matrices/blosum.csv")
 
 
+# DeMaSk
+df_demask <- read_tsv("data/matrices/demask.txt")
+df_demask <- df_demask %>%
+  mutate(wildtype=names(df_demask)) %>%
+  pivot_longer(!wildtype, names_to="mutation", values_to="score")
+
+
+# Hoie et al.
+aas <- c("A", "C", "D", "E", "F", "G", "H", "I", "K", "L",
+         "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y")
+df_hoie <- read_csv("data/matrices/hoie.csv")
+names(df_hoie) <- aas
+df_hoie <- df_hoie %>%
+  mutate(wildtype=aas) %>%
+  pivot_longer(!wildtype, names_to="mutation", values_to="score")
+
+
 # Compare ranks of scores
 with(read_csv("results/aa.csv") %>%
        inner_join(df_yampolsky_imputed %>% rename(score.yampolsky=score), by=c("wildtype", "mutation")) %>%
-       inner_join(blosum %>% rename(score.blosum=score), by=c("wildtype", "mutation")),
-     cor(score, score.yampolsky, method="spearman"))
+       inner_join(df_demask %>% rename(score.demask=score), by=c("wildtype", "mutation")) %>%
+       inner_join(df_hoie %>% rename(score.hoie=score), by=c("wildtype", "mutation")),
+     paste(cor(score, score.yampolsky, method="spearman"),
+           cor(score, score.demask, method="spearman"),
+           cor(score, score.hoie, method="spearman")))

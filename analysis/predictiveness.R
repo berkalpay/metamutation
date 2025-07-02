@@ -12,28 +12,37 @@ join_cols <- c("wildtype", "position", "mutation", "name")
 df_pred <- df_data %>%
   rename(DMS=score) %>%
   inner_join(read_csv("results/predictions_aa_full.csv"), by=join_cols) %>%
-  mutate(`Surf. acc.`=1/(1+exp(-surface_accessibility-0.5))) %>%
   inner_join(read_csv("data/matrices/yampolsky_imputed.csv"), by=c("wildtype", "mutation")) %>%
-  rename(`Yampolsky`=score) %>%
+  rename(`Yampolsky-Stoltzfus`=score) %>%
   inner_join(read_csv("data/matrices/blosum.csv"), by=c("wildtype", "mutation")) %>%
   rename(BLOSUM62=score)
 
 
 # Full model
 df_dms <- read_csv("data/dms.csv") %>%
-  select(DMS_id, taxon, DMS_number_single_mutants, coarse_selection_type) %>%
+  select(DMS_id, DMS_number_single_mutants, coarse_selection_type) %>%
   rename(name=DMS_id)
 df_eval <- df_pred %>%
   group_by(name) %>%
   summarize(spearman=cor(DMS, `Full model`, method="spearman")) %>%
   inner_join(df_dms, by="name")
-paste("mean Spearman correlation:", round(mean(df_eval$spearman), 4))
-ggplot(df_eval, aes(x=DMS_number_single_mutants, y=spearman, color=taxon)) +
-  geom_point(alpha=0.8, shape=21, stroke=0.6) +
+df_eval[df_eval$coarse_selection_type=="OrganismalFitness",]$coarse_selection_type <- "Organismal Fitness"
+(df_eval_agg <- df_eval %>%
+    group_by(coarse_selection_type) %>%
+    summarize(spearman=mean(spearman)) %>%
+    mutate(spearman_rounded=round(spearman, 2)))
+ggplot(df_eval, aes(x=DMS_number_single_mutants, y=spearman,
+                    color=coarse_selection_type)) +
+  geom_point(alpha=0.8, shape=21, stroke=0.6, size=1) +
+  geom_hline(data=df_eval_agg,
+             aes(yintercept=spearman, color=coarse_selection_type),
+             linetype="dotted", show.legend=F) +
   labs(x="DMS size", y="Spearman correlation") +
   theme_classic() +
-  theme(legend.position="top", legend.title=element_blank(),
-        aspect.ratio=1)
+  theme(aspect.ratio=1,
+        legend.position="top", legend.title=element_blank(),
+        axis.text=element_text(color="black")) +
+  guides(color=guide_legend(nrow=2, byrow=T))
 ggsave("figures/dms_correlations.pdf", width=4, height=4)
 
 
@@ -66,12 +75,22 @@ df_pred <- join_scores(df_pred, combine_scores("TranceptEVE_L"), "TranceptEVE")
 df_pred <- join_scores(df_pred, combine_scores("MIF"), "MIF")
 print(nrow(df_pred) == nrow(df_data))
 write_csv(df_pred, "results/predictions.csv")
+print(df_pred %>%
+        group_by(name) %>%
+        summarize(cor=cor(MIF, DMS)) %>%
+        summarize(mean_cor=mean(cor)))
+df_pred <- df_pred %>%
+  select(-MIF) %>%
+  rename(Experimental=DMS,
+         `Surf. acc.`=surface_accessibility,
+         Exchangeability=`AA-only`,
+         `Exchangeability\n+ surf. acc.`=`Full model`)
 
 cors_df <- c()
-score_cols <- c("DMS",
-                "Full model", "AA-only", "Surf. acc.",
-                "Yampolsky", "BLOSUM62",
-                "MIF", "GEMME", "TranceptEVE", "ProSST")
+score_cols <- c("Experimental",
+                "Exchangeability\n+ surf. acc.", "Surf. acc.", "Exchangeability",
+                "Yampolsky-Stoltzfus", "BLOSUM62",
+                "GEMME", "TranceptEVE", "ProSST")
 for (score_col1 in score_cols) {
   for (score_col2 in score_cols) {
     m <- mean((df_pred %>%
@@ -91,17 +110,15 @@ ggplot(cors_df %>%
        aes(model1, model2)) +
   geom_tile(aes(fill=spearman), show.legend=F) +
   geom_shadowtext(aes(label=paste0(".", round(spearman, 2)*100)), size=4.2) +
-  scale_x_discrete(labels = paste(c("**DMS**", score_cols[2:length(score_cols)]))) +
   scale_y_discrete(limits=rev, expand=c(0,0)) +
   scale_fill_continuous(limits=c(0, 1), low="white", high="darkgreen") +
   geom_vline(xintercept=0.5, linewidth=1) +
   geom_vline(xintercept=1.505, linewidth=1) +
-  annotate("text", x=3.2, y=8.3, angle=-45, label="Physicochemical") +
-  annotate("text", x=5.8, y=5.8, angle=-45, label="Matrices") +
-  annotate("text", x=8.4, y=3.3, angle=-45, label="Sequence models") +
   theme_minimal() +
-  theme(panel.grid.major=element_blank(), aspect.ratio=1,
+  coord_fixed(clip="off") +
+  theme(aspect.ratio=1,
+        panel.grid.major=element_blank(),
         axis.title.x=element_blank(), axis.title.y=element_blank(),
-        axis.text.x=element_markdown(color="black", angle=45, hjust=1),
+        axis.text.x=element_text(color="black", angle=55, hjust=1),
         axis.text.y=element_text(color="black"))
 ggsave("figures/rank_correlations.pdf", width=5, height=5)
