@@ -4,13 +4,15 @@ import pandas as pd
 from Bio.PDB import PDBParser, DSSP
 
 
-def extract_structural_features(pdb_fn):
-    name = os.path.basename(pdb_fn).split(".")[0]
-    temp_fn = f"{name}_temp.pdb"
+def extract_accessibilities(pdb_filepath: str) -> dict[int, float]:
+    """Takes a PDB filepath and returns a mapping of site to surface accessibility."""
+
+    name = os.path.basename(pdb_filepath).split(".")[0]
+    temp_filepath = f"{name}_temp.pdb"
     wrote_header = False
-    with open(temp_fn, "w") as temp_pdb:
+    with open(temp_filepath, "w") as temp_pdb:
         temp_pdb.write("HEADER\n")
-        with open(pdb_fn, "r") as original_pdb:
+        with open(pdb_filepath) as original_pdb:
             for line in original_pdb:
                 if not (line.startswith("HEADER") or line.startswith("CRYST1")):
                     if not wrote_header and (
@@ -24,23 +26,26 @@ def extract_structural_features(pdb_fn):
     assert wrote_header
 
     parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("PDB_structure", temp_fn)
-    features = [[res[0], res[3]] for res in DSSP(structure[0], temp_fn)]
-    os.remove(temp_fn)
+    structure = parser.get_structure("PDB_structure", temp_filepath)
+    features = {res[0]: res[3] for res in DSSP(structure[0], temp_filepath)}
+    os.remove(temp_filepath)
 
     return features
 
 
-pdb_dir = "structures/"
-pdb_fns = [fn for fn in os.listdir(pdb_dir) if fn[-4:] == ".pdb"]
-pdb_paths = [pdb_dir + pdb_fn for pdb_fn in pdb_fns]
-structural_features = Pool().map(extract_structural_features, pdb_paths)
-structural_features_list = []
-for fn, protein_structural_features in zip(pdb_fns, structural_features):
-    name = os.path.basename(fn).split(".")[0]
-    for pos_features in protein_structural_features:
-        structural_features_list.append([name, *pos_features])
+if __name__ == "__main__":
+    # Extract structural features for all the PDBs in the structures directory
 
-out_df = pd.DataFrame(structural_features_list)
-out_df.columns = ["name", "position", "surface_accessibility"]
-out_df.to_csv("structural_features.csv", index=False)
+    pdb_dir = "structures/"
+    pdb_fns = [fn for fn in os.listdir(pdb_dir) if fn[-4:] == ".pdb"]
+    pdb_paths = [pdb_dir + pdb_fn for pdb_fn in pdb_fns]
+    structural_features = Pool().map(extract_accessibilities, pdb_paths)
+    structural_features_list = []
+    for fn, protein_structural_features in zip(pdb_fns, structural_features):
+        name = os.path.basename(fn).split(".")[0]
+        for pos_features in protein_structural_features.items():
+            structural_features_list.append([name, *pos_features])
+
+    out_df = pd.DataFrame(structural_features_list)
+    out_df.columns = ["name", "position", "surface_accessibility"]
+    out_df.to_csv("structural_features.csv", index=False)
